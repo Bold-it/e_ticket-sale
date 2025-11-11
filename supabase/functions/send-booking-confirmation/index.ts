@@ -2,8 +2,12 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { Resend } from "https://esm.sh/resend@4.0.0";
 import jsPDF from "https://esm.sh/jspdf@2.5.2";
 import QRCode from "https://esm.sh/qrcode@1.5.4";
+import { encode as base64Encode } from "https://deno.land/std@0.190.0/encoding/base64.ts";
 
-const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
+const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
+const RESEND_FROM_EMAIL = Deno.env.get("RESEND_FROM_EMAIL") || "BolTech <onboarding@resend.dev>";
+const RESEND_REPLY_TO = Deno.env.get("RESEND_REPLY_TO_EMAIL") || undefined;
+const resend = new Resend(RESEND_API_KEY);
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -175,119 +179,122 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
+    if (!RESEND_API_KEY) {
+      console.error("Missing RESEND_API_KEY env variable");
+      return new Response(JSON.stringify({ success: false, error: "Missing RESEND_API_KEY" }), {
+        status: 500,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+
     const booking: BookingConfirmationRequest = await req.json();
-    
-    console.log('Generating ticket PDF for booking:', booking.bookingCode);
-    
+    console.log("Generating ticket PDF for booking:", booking.bookingCode);
+
     // Generate PDF ticket
     const pdfBuffer = await generateTicketPDF(booking);
-    const pdfBase64 = btoa(String.fromCharCode(...new Uint8Array(pdfBuffer)));
+    const pdfBase64 = base64Encode(new Uint8Array(pdfBuffer));
 
-    console.log('Sending email to:', booking.customerEmail);
+    console.log("Sending email to:", booking.customerEmail);
 
-    // Send email with PDF attachment
-    const emailResponse = await resend.emails.send({
-      from: "BolTech <onboarding@resend.dev>",
-      to: [booking.customerEmail],
-      subject: `✅ Booking Confirmed - ${booking.eventTitle}`,
-      html: `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background: linear-gradient(135deg, #145330, #1a6b40); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
-            .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
-            .booking-code { background: #DAA520; color: white; padding: 15px; text-align: center; font-size: 24px; font-weight: bold; border-radius: 5px; margin: 20px 0; }
-            .details { background: white; padding: 20px; border-radius: 5px; margin: 20px 0; }
-            .detail-row { padding: 8px 0; border-bottom: 1px solid #eee; }
-            .detail-label { font-weight: bold; color: #145330; }
-            .footer { text-align: center; color: #666; font-size: 12px; margin-top: 30px; }
-            .button { background: #DAA520; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 10px 0; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <div class="header">
-              <h1>🎉 Booking Confirmed!</h1>
-              <p>Your ticket for ${booking.eventTitle}</p>
+    const html = `<!DOCTYPE html><html><body>
+      <div class="container">
+        <div class="header">
+          <h1>🎉 Booking Confirmed!</h1>
+          <p>Your ticket for ${booking.eventTitle}</p>
+        </div>
+        <div class="content">
+          <p>Dear ${booking.customerName},</p>
+          <p>Great news! Your booking has been confirmed and payment received. Your ticket is attached to this email.</p>
+          
+          <div class="booking-code">
+            Booking Code: ${booking.bookingCode}
+          </div>
+          
+          <div class="details">
+            <h3 style="color: #145330; margin-top: 0;">Event Details</h3>
+            <div class="detail-row">
+              <span class="detail-label">Event:</span> ${booking.eventTitle}
             </div>
-            <div class="content">
-              <p>Dear ${booking.customerName},</p>
-              <p>Great news! Your booking has been confirmed and payment received. Your ticket is attached to this email.</p>
-              
-              <div class="booking-code">
-                Booking Code: ${booking.bookingCode}
-              </div>
-              
-              <div class="details">
-                <h3 style="color: #145330; margin-top: 0;">Event Details</h3>
-                <div class="detail-row">
-                  <span class="detail-label">Event:</span> ${booking.eventTitle}
-                </div>
-                <div class="detail-row">
-                  <span class="detail-label">Date:</span> ${booking.eventDate}
-                </div>
-                <div class="detail-row">
-                  <span class="detail-label">Time:</span> ${booking.eventTime}
-                </div>
-                <div class="detail-row">
-                  <span class="detail-label">Venue:</span> ${booking.eventVenue}
-                </div>
-                <div class="detail-row">
-                  <span class="detail-label">Location:</span> ${booking.eventLocation}
-                </div>
-              </div>
-              
-              <div class="details">
-                <h3 style="color: #145330; margin-top: 0;">Ticket Information</h3>
-                <div class="detail-row">
-                  <span class="detail-label">Ticket Type:</span> ${booking.ticketType}
-                </div>
-                <div class="detail-row">
-                  <span class="detail-label">Quantity:</span> ${booking.ticketQuantity}
-                </div>
-                <div class="detail-row">
-                  <span class="detail-label">Total Paid:</span> ${booking.currency} ${booking.totalAmount.toFixed(2)}
-                </div>
-              </div>
-              
-              <p><strong>Important:</strong></p>
-              <ul>
-                <li>Please download and save your ticket PDF attached to this email</li>
-                <li>Present your ticket (printed or on mobile) at the venue entrance</li>
-                <li>Your booking code is: <strong>${booking.bookingCode}</strong></li>
-              </ul>
-              
-              <p>If you have any questions, contact us on WhatsApp:</p>
-              <a href="https://wa.me/${booking.organizerPhone.replace(/\D/g, '')}" class="button">
-                💬 Contact Organizer
-              </a>
-              
-              <div class="footer">
-                <p>Thank you for booking with EventLink Ghana!</p>
-                <p>See you at the event! 🎊</p>
-              </div>
+            <div class="detail-row">
+              <span class="detail-label">Date:</span> ${booking.eventDate}
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Time:</span> ${booking.eventTime}
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Venue:</span> ${booking.eventVenue}
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Location:</span> ${booking.eventLocation}
             </div>
           </div>
-        </body>
-        </html>
-      `,
-      attachments: [
-        {
-          filename: `ticket-${booking.bookingCode}.pdf`,
-          content: pdfBase64,
-        },
-      ],
-    });
+          
+          <div class="details">
+            <h3 style="color: #145330; margin-top: 0;">Ticket Information</h3>
+            <div class="detail-row">
+              <span class="detail-label">Ticket Type:</span> ${booking.ticketType}
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Quantity:</span> ${booking.ticketQuantity}
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Total Paid:</span> ${booking.currency} ${booking.totalAmount.toFixed(2)}
+            </div>
+          </div>
+          
+          <p><strong>Important:</strong></p>
+          <ul>
+            <li>Please download and save your ticket PDF attached to this email</li>
+            <li>Present your ticket (printed or on mobile) at the venue entrance</li>
+            <li>Your booking code is: <strong>${booking.bookingCode}</strong></li>
+          </ul>
+          
+          <p>If you have any questions, contact us on WhatsApp:</p>
+          <a href="https://wa.me/${booking.organizerPhone.replace(/\D/g, '')}" class="button">
+            💬 Contact Organizer
+          </a>
+          
+          <div class="footer">
+            <p>Thank you for booking with EventLink Ghana!</p>
+            <p>See you at the event! 🎊</p>
+          </div>
+        </div>
+      </div>
+    </body>
+    </html>
+    `;
+    let emailResponse;
+    try {
+      emailResponse = await resend.emails.send({
+        from: RESEND_FROM_EMAIL,
+        to: [booking.customerEmail],
+        reply_to: RESEND_REPLY_TO,
+        subject: `✅ Booking Confirmed - ${booking.eventTitle}`,
+        html,
+        attachments: [
+          {
+            filename: `ticket-${booking.bookingCode}.pdf`,
+            content: pdfBase64,
+          },
+        ],
+      });
+    } catch (sendErr) {
+      console.error("Primary email send failed, retrying without attachment:", sendErr);
+      emailResponse = await resend.emails.send({
+        from: RESEND_FROM_EMAIL,
+        to: [booking.customerEmail],
+        reply_to: RESEND_REPLY_TO,
+        subject: `✅ Booking Confirmed - ${booking.eventTitle}`,
+        html,
+      });
+    }
 
     console.log("Email sent successfully:", emailResponse);
 
-    return new Response(JSON.stringify({ 
-      success: true, 
+    return new Response(JSON.stringify({
+      success: true,
       message: "Booking confirmation email sent successfully",
-      emailId: emailResponse.data?.id 
+      emailId: emailResponse.data?.id,
     }), {
       status: 200,
       headers: {
@@ -297,16 +304,10 @@ const handler = async (req: Request): Promise<Response> => {
     });
   } catch (error: any) {
     console.error("Error in send-booking-confirmation function:", error);
-    return new Response(
-      JSON.stringify({ 
-        success: false, 
-        error: error.message || "Failed to send confirmation email" 
-      }),
-      {
-        status: 500,
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      }
-    );
+    return new Response(JSON.stringify({ success: false, error: error.message || "Failed to send confirmation email" }), {
+      status: 500,
+      headers: { "Content-Type": "application/json", ...corsHeaders },
+    });
   }
 };
 

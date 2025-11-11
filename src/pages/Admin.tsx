@@ -117,39 +117,45 @@ const Admin = () => {
         const event = mockEvents.find(e => e.id === booking.event_id);
         
         try {
-          const { error: emailError } = await supabase.functions.invoke('send-booking-confirmation', {
-            body: {
-              bookingCode: booking.booking_code,
-              customerName: booking.customer_name,
-              customerEmail: booking.customer_email,
-              customerPhone: booking.customer_phone,
-              eventTitle: booking.event_title,
-              eventDate: event?.date || new Date(booking.created_at).toLocaleDateString(),
-              eventTime: event?.time || '7:00 PM',
-              eventVenue: event?.venue || 'Event Venue',
-              eventLocation: event?.location || 'Accra, Ghana',
-              ticketType: booking.ticket_type || 'Regular',
-              ticketQuantity: booking.ticket_quantity,
-              totalAmount: booking.total_amount,
-              currency: booking.currency,
-              organizerName: event?.organizerName || 'BolTech',
-              organizerPhone: event?.organizerPhone || '+233240819270',
-            },
-          });
-
-          if (!emailError) {
-            toast({
-              title: "✓ Payment Confirmed & Email Sent!",
-              description: `Booking ${bookingCode} confirmed. Confirmation email with ticket PDF sent to ${booking.customer_email}`,
-            });
-          } else {
-            console.error('Email error:', emailError);
-            toast({
-              title: "✓ Payment Confirmed",
-              description: `Booking ${bookingCode} confirmed, but email could not be sent`,
-              variant: "default",
-            });
-          }
+          const { data: emailResult, error: emailError } = await supabase.functions.invoke('send-booking-confirmation', {
+             body: {
+               bookingCode: booking.booking_code,
+               customerName: booking.customer_name,
+               customerEmail: booking.customer_email,
+               customerPhone: booking.customer_phone,
+               eventTitle: booking.event_title,
+               eventDate: event?.date || new Date(booking.created_at).toLocaleDateString(),
+               eventTime: event?.time || '7:00 PM',
+               eventVenue: event?.venue || 'Event Venue',
+               eventLocation: event?.location || 'Accra, Ghana',
+               ticketType: booking.ticket_type || 'Regular',
+               ticketQuantity: booking.ticket_quantity,
+               totalAmount: booking.total_amount,
+               currency: booking.currency,
+               organizerName: event?.organizerName || 'BolTech',
+               organizerPhone: event?.organizerPhone || '+233240819270',
+             },
+           });
+-
+-          if (!emailError) {
++
++          if (!emailError && emailResult?.success) {
+             toast({
+               title: "✓ Payment Confirmed & Email Sent!",
+               description: `Booking ${bookingCode} confirmed. Confirmation email with ticket PDF sent to ${booking.customer_email}`,
+             });
+-          } else {
++          } else {
+             console.error('Email error:', emailError);
++            if (emailResult && emailResult.error) {
++              console.error('Email function error:', emailResult.error);
++            }
+             toast({
+               title: "✓ Payment Confirmed",
+               description: `Booking ${bookingCode} confirmed, but email could not be sent`,
+               variant: "default",
+             });
+           }
         } catch (error) {
           console.error('Email sending error:', error);
           toast({
