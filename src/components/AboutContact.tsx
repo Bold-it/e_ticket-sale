@@ -32,7 +32,7 @@ const AboutContact = () => {
               className="flex items-center gap-3 text-muted-foreground hover:text-primary transition-colors"
             >
               <Phone className="h-5 w-5 text-primary" />
-              <span>024 081 9270</span>
+              <span>0240819270</span>
             </a>
 
             <a 
