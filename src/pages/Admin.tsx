@@ -132,8 +132,8 @@ const Admin = () => {
               ticketQuantity: booking.ticket_quantity,
               totalAmount: booking.total_amount,
               currency: booking.currency,
-              organizerName: event?.organizerName || 'EventLink Ghana',
-              organizerPhone: event?.organizerPhone || '+233244123456',
+              organizerName: event?.organizerName || 'BolTech',
+              organizerPhone: event?.organizerPhone || '+233240819270',
             },
           });
 

@@ -187,7 +187,7 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Send email with PDF attachment
     const emailResponse = await resend.emails.send({
-      from: "EventLink Ghana <onboarding@resend.dev>",
+      from: "BolTech <onboarding@resend.dev>",
       to: [booking.customerEmail],
       subject: `✅ Booking Confirmed - ${booking.eventTitle}`,
       html: `
