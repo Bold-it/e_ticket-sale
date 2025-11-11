@@ -16,7 +16,7 @@ export const mockEvents: Event[] = [
     totalTickets: 500,
     imageUrl: "/bellogod-event.jpg",
     organizerName: "EventLink Ghana",
-    organizerPhone: "+233501234567",
+    organizerPhone: "+233240819270",
     featured: true,
   },
 ];
