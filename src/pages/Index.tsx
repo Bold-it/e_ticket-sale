@@ -63,7 +63,7 @@ const Index = () => {
 
       <footer className="border-t border-border py-8 mt-16">
         <div className="container text-center text-muted-foreground">
-          <p>© 2024 EventLink Ghana. All rights reserved.</p>
+          <p>© 2025 EventLink Ghana. All rights reserved.</p>
         </div>
       </footer>
     </div>
