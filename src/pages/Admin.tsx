@@ -5,11 +5,27 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { CheckCircle, XCircle, Search, Ticket, Download, LogOut, BarChart3 } from "lucide-react";
+import { CheckCircle, XCircle, Search, Ticket, Download, LogOut, BarChart3, Trash2, Calendar } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { generateTicketPDF } from "@/lib/pdfGenerator";
 import { mockEvents } from "@/lib/mockData";
 import { supabase } from "@/integrations/supabase/client";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { format } from "date-fns";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Table,
   TableBody,
@@ -22,6 +38,11 @@ import {
 const Admin = () => {
   const [bookings, setBookings] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedBookings, setSelectedBookings] = useState<string[]>([]);
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [dateFrom, setDateFrom] = useState<Date>();
+  const [dateTo, setDateTo] = useState<Date>();
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -117,45 +138,39 @@ const Admin = () => {
         const event = mockEvents.find(e => e.id === booking.event_id);
         
         try {
-          const { data: emailResult, error: emailError } = await supabase.functions.invoke('send-booking-confirmation', {
-             body: {
-               bookingCode: booking.booking_code,
-               customerName: booking.customer_name,
-               customerEmail: booking.customer_email,
-               customerPhone: booking.customer_phone,
-               eventTitle: booking.event_title,
-               eventDate: event?.date || new Date(booking.created_at).toLocaleDateString(),
-               eventTime: event?.time || '7:00 PM',
-               eventVenue: event?.venue || 'Event Venue',
-               eventLocation: event?.location || 'Accra, Ghana',
-               ticketType: booking.ticket_type || 'Regular',
-               ticketQuantity: booking.ticket_quantity,
-               totalAmount: booking.total_amount,
-               currency: booking.currency,
-               organizerName: event?.organizerName || 'BolTech',
-               organizerPhone: event?.organizerPhone || '+233240819270',
-             },
-           });
--
--          if (!emailError) {
-+
-+          if (!emailError && emailResult?.success) {
-             toast({
-               title: "✓ Payment Confirmed & Email Sent!",
-               description: `Booking ${bookingCode} confirmed. Confirmation email with ticket PDF sent to ${booking.customer_email}`,
-             });
--          } else {
-+          } else {
-             console.error('Email error:', emailError);
-+            if (emailResult && emailResult.error) {
-+              console.error('Email function error:', emailResult.error);
-+            }
-             toast({
-               title: "✓ Payment Confirmed",
-               description: `Booking ${bookingCode} confirmed, but email could not be sent`,
-               variant: "default",
-             });
-           }
+          const { error: emailError } = await supabase.functions.invoke('send-booking-confirmation', {
+            body: {
+              bookingCode: booking.booking_code,
+              customerName: booking.customer_name,
+              customerEmail: booking.customer_email,
+              customerPhone: booking.customer_phone,
+              eventTitle: booking.event_title,
+              eventDate: event?.date || new Date(booking.created_at).toLocaleDateString(),
+              eventTime: event?.time || '7:00 PM',
+              eventVenue: event?.venue || 'Event Venue',
+              eventLocation: event?.location || 'Accra, Ghana',
+              ticketType: booking.ticket_type || 'Regular',
+              ticketQuantity: booking.ticket_quantity,
+              totalAmount: booking.total_amount,
+              currency: booking.currency,
+              organizerName: event?.organizerName || 'EventLink Ghana',
+              organizerPhone: event?.organizerPhone || '+233244123456',
+            },
+          });
+
+          if (!emailError) {
+            toast({
+              title: "✓ Payment Confirmed & Email Sent!",
+              description: `Booking ${bookingCode} confirmed. Confirmation email with ticket PDF sent to ${booking.customer_email}`,
+            });
+          } else {
+            console.error('Email error:', emailError);
+            toast({
+              title: "✓ Payment Confirmed",
+              description: `Booking ${bookingCode} confirmed, but email could not be sent`,
+              variant: "default",
+            });
+          }
         } catch (error) {
           console.error('Email sending error:', error);
           toast({
@@ -206,11 +221,62 @@ const Admin = () => {
     }
   };
 
-  const filteredBookings = bookings.filter(booking =>
-    booking.booking_code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    booking.customer_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    booking.event_title?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const handleBulkDelete = async () => {
+    if (selectedBookings.length === 0) return;
+
+    const { error } = await supabase
+      .from('bookings')
+      .delete()
+      .in('id', selectedBookings);
+
+    if (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete bookings",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    toast({
+      title: "Success",
+      description: `${selectedBookings.length} booking(s) deleted successfully`,
+    });
+
+    setSelectedBookings([]);
+    setShowDeleteDialog(false);
+    loadBookings();
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedBookings.length === filteredBookings.length) {
+      setSelectedBookings([]);
+    } else {
+      setSelectedBookings(filteredBookings.map(b => b.id));
+    }
+  };
+
+  const toggleSelectBooking = (bookingId: string) => {
+    setSelectedBookings(prev =>
+      prev.includes(bookingId)
+        ? prev.filter(id => id !== bookingId)
+        : [...prev, bookingId]
+    );
+  };
+
+  const filteredBookings = bookings.filter(booking => {
+    const matchesSearch = booking.booking_code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      booking.customer_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      booking.event_title?.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    const matchesStatus = statusFilter === "all" || booking.status === statusFilter;
+    
+    const bookingDate = new Date(booking.created_at);
+    const matchesDateFrom = !dateFrom || bookingDate >= dateFrom;
+    const matchesDateTo = !dateTo || bookingDate <= dateTo;
+    
+    return matchesSearch && matchesStatus && matchesDateFrom && matchesDateTo;
+  });
 
   const stats = {
     total: bookings.length,
@@ -298,22 +364,106 @@ const Admin = () => {
           {/* Search and Table */}
           <Card className="bg-gradient-card border-border">
             <CardHeader>
-              <CardTitle>All Bookings</CardTitle>
-              <div className="relative mt-4">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search by booking code, name, or event..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
-                />
+              <div className="flex items-center justify-between">
+                <CardTitle>All Bookings</CardTitle>
+                {selectedBookings.length > 0 && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => setShowDeleteDialog(true)}
+                    className="gap-2"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Delete Selected ({selectedBookings.length})
+                  </Button>
+                )}
               </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Search bookings..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Filter by status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="confirmed">Confirmed</SelectItem>
+                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className={cn("justify-start text-left font-normal", !dateFrom && "text-muted-foreground")}>
+                      <Calendar className="mr-2 h-4 w-4" />
+                      {dateFrom ? format(dateFrom, "MMM dd, yyyy") : "From date"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0 bg-popover" align="start">
+                    <CalendarComponent
+                      mode="single"
+                      selected={dateFrom}
+                      onSelect={setDateFrom}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className={cn("justify-start text-left font-normal", !dateTo && "text-muted-foreground")}>
+                      <Calendar className="mr-2 h-4 w-4" />
+                      {dateTo ? format(dateTo, "MMM dd, yyyy") : "To date"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0 bg-popover" align="start">
+                    <CalendarComponent
+                      mode="single"
+                      selected={dateTo}
+                      onSelect={setDateTo}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              {(statusFilter !== "all" || dateFrom || dateTo) && (
+                <div className="flex gap-2 mt-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setStatusFilter("all");
+                      setDateFrom(undefined);
+                      setDateTo(undefined);
+                    }}
+                  >
+                    Clear Filters
+                  </Button>
+                </div>
+              )}
             </CardHeader>
             <CardContent>
               <div className="rounded-md border border-border overflow-hidden">
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-12">
+                        <Checkbox
+                          checked={selectedBookings.length === filteredBookings.length && filteredBookings.length > 0}
+                          onCheckedChange={toggleSelectAll}
+                        />
+                      </TableHead>
                       <TableHead>Booking Code</TableHead>
                       <TableHead>Event</TableHead>
                       <TableHead>Customer</TableHead>
@@ -327,13 +477,19 @@ const Admin = () => {
                   <TableBody>
                     {filteredBookings.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                        <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                           No bookings found
                         </TableCell>
                       </TableRow>
                     ) : (
                       filteredBookings.map((booking) => (
                         <TableRow key={booking.id}>
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedBookings.includes(booking.id)}
+                              onCheckedChange={() => toggleSelectBooking(booking.id)}
+                            />
+                          </TableCell>
                           <TableCell className="font-mono text-sm">{booking.booking_code}</TableCell>
                           <TableCell className="font-medium">{booking.event_title}</TableCell>
                           <TableCell>
@@ -414,6 +570,23 @@ const Admin = () => {
           </Card>
         </div>
       </section>
+
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Bookings</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete {selectedBookings.length} booking(s)? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleBulkDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

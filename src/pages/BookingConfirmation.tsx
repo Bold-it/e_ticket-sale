@@ -74,7 +74,8 @@ const BookingConfirmation = () => {
       `Hi, I want to book ${booking.ticket_quantity} ${booking.ticket_type || 'Regular'} ticket(s) for ${booking.event_title}. My booking code is ${booking.booking_code}.`
     );
     
-    window.open(`https://wa.me/${event.organizerPhone.replace(/[^0-9]/g, '')}?text=${message}`, '_blank');
+    const phoneDigits = '233240819270';
+    window.open(`https://wa.me/${phoneDigits}?text=${message}`, '_blank');
   };
 
   return (
