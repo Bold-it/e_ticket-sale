@@ -22,7 +22,7 @@ const Header = () => {
           </Link>
         </nav>
 
-        <Link to="/events">
+        <Link to="/event/1">
           <Button className="bg-gradient-hero hover:opacity-90 transition-opacity">
             Book Tickets
           </Button>
