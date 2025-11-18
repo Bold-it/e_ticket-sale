@@ -122,7 +122,7 @@ const EventDetail = () => {
                 <img 
                   src={event.imageUrl} 
                   alt={event.title}
-                  className="h-full w-full object-cover"
+                  className="h-full w-full object-contain bg-background"
                 />
                 {event.featured && (
                   <Badge className="absolute top-4 left-4 bg-accent text-accent-foreground">

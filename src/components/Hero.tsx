@@ -6,7 +6,7 @@ const Hero = () => {
           <img
             src="/flyer.jpg"
             alt="Congratulations Jams event flyer"
-            className="w-full rounded-xl border border-border shadow-card object-contain"
+            className="w-full max-h-[520px] md:max-h-[680px] rounded-xl border border-border shadow-card object-contain bg-background"
           />
         </div>
       </div>
